@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Sync App Schema Updates</title>
+<style>
+body
+{
+	font-family: Roboto, sans-serif;
+	color: #0f3c4b;
+	background-color: #e5edf1;
+}
+</style>
+</head>
+<body>
+<p id="status" alt="Updating ..." style=width="500" height="125"/>Starting....</p>
+<div id="log-content">
+
+<div id="myContents"></div>
+</body>
+<script>
+const userToken = 'b4fyfx_mzif_0_cjbfb79dvphxj7d9fv5j7c8gxkyi';
+const configTable = 'brekbj3zv';
+const sourceAppFID = 8
+const targetAppFID = 11
+const recordID = window.location.hash.substring(1);
+var appA = []
+var appB = []
+// Get the App IDs for the Source (AppA) and Target (App B)
+fetch("https://api.quickbase.com/v1/records/query", 
+{
+    headers: {
+        'Content-Type': 'application/json',
+        'QB-Realm-Hostname': 'demo',
+        'Authorization': 'QB-USER-TOKEN ' + userToken
+    },
+    method: "POST",
+    body: JSON.stringify({"from": configTable,"select": [sourceAppFID,targetAppFID], "where": "{3.EX." + recordID + "}"})
+})
+.then(function(response) {
+    return response.text()
+})
+.then(function(text) {
+    var record =  JSON.parse(text)
+    document.getElementById("log-content").innerHTML += "<p>Gathering info...</p>";
+	  appA.appID = record.data[0]['8'].value
+ 	  appB.appID = record.data[0]['11'].value
+    document.getElementById("log-content").innerHTML += "<p>Source App ID: " +   appA.appID  + ", Target App ID: " + appB.appID + "</p>";
+    queryTables(appA, appB)
+})
+.catch(function(error) {
+    console.log('Request failed', error)
+});
+
+async function queryTables (appA, appB) {
+await fetch("https://api.quickbase.com/v1/tables?appId=" + appB.appID, 
+{
+    headers: {
+        'Content-Type': 'application/json',
+        'QB-Realm-Hostname': 'demo',
+        'Authorization': 'QB-USER-TOKEN ' + userToken
+    },
+    method: "GET"
+})
+.then(function(response) {
+    return response.text()
+})
+.then(function(text) {
+    console.log( JSON.parse(text))
+    appB.tables =  JSON.parse(text)
+})
+.catch(function(error) {
+    console.log('Request failed', error)
+  });
+await fetch("https://api.quickbase.com/v1/tables?appId=" + appA.appID, 
+{
+    headers: {
+        'Content-Type': 'application/json',
+        'QB-Realm-Hostname': 'demo',
+        'Authorization': 'QB-USER-TOKEN ' + userToken
+    },
+    method: "GET"
+})
+.then(function(response) {
+    return response.text()
+})
+.then(function(text) {
+     document.getElementById("log-content").innerHTML += "<p>Querying Tables...</p>";
+    console.log( JSON.parse(text))
+    appA.tables =  JSON.parse(text)
+})
+.catch(function(error) {
+    console.log('Request failed', error)
+  });
+tableCompareAonB(appA, appB)
+}
+
+async function tableCompareAonB(source, target) {
+document.getElementById("log-content").innerHTML += "<p>Comparing from App A...</p>";
+var found
+for(var i = 0; i < source.tables.length; i++) {
+	found = false
+	for(var j = 0; j < target.tables.length; j++) {
+        	if (source.tables[i].name == target.tables[j].name ) {
+			found = true
+			document.getElementById("log-content").innerHTML += "<p> Found " + source.tables[i].name + "</p>";
+			if (source.tables[i].description !== target.tables[i].description || source.tables[i].singleRecordName !== target.tables[i].singleRecordName || source.tables[i].pluralRecordName !== target.tables[i].pluralRecordName) {
+        		updateTable(appA.tables[i], appB.tables[j])
+			}
+        } 
+}
+if (found == false) {
+		createTable(appA.tables[i])
+	}
+} 
+tableCompareBonA()
+}
+
+function updateTable (source, target) {
+fetch("https://api.quickbase.com/v1/tables/" + target.id + "?appId=" + appB.appID , 
+{
+    headers: {
+        'Content-Type': 'application/json',
+        'QB-Realm-Hostname': 'demo',
+        'Authorization': 'QB-USER-TOKEN ' + userToken
+    },
+    method: "POST",
+     body: JSON.stringify({"description": source.description,"singleRecordName": source.singleRecordName, "pluralRecordName": source.pluralRecordName})
+})
+.then(function(response) {
+    return response.text()
+})
+.then(function(text) {
+	document.getElementById("log-content").innerHTML += "<p>Updated " + source.name + " table</p>";
+       log = log + source.name + " table updated.\n"
+	console.log(source.name + " updated.")
+})
+.catch(function(error) {
+    console.log('Request failed', error)
+  });
+}
+
+async function createTable (source) {
+await fetch("https://api.quickbase.com/v1/tables?appId=" + appB.appID , 
+{
+    headers: {
+        'Content-Type': 'application/json',
+        'QB-Realm-Hostname': 'demo',
+        'Authorization': 'QB-USER-TOKEN ' + userToken
+    },
+    method: "POST",
+     body: JSON.stringify({"name": source.name, "description": source.description,"singleRecordName": source.singleRecordName, "pluralRecordName": source.pluralRecordName})
+})
+.then(function(response) {
+    return response.text()
+})
+.then(function(text) {
+    document.getElementById("log-content").innerHTML += "<p>Created " + source.name + " table</p>";
+    log = log + source.name + " table created.\n"
+    console.log(source.name + " created.")
+})
+.catch(function(error) {
+    console.log('Request failed', error)
+  });
+}
+
+function tableCompareBonA() {
+for(var i = 0; i < appB.tables.length; i++) {
+	var found = false
+	for(var j = 0; j < appA.tables.length; j++) {
+        	if (appB.tables[i].name == appA.tables[j].name ) {
+		//console.log("Found " + item.name)
+		found = true
+        } 
+}
+if (found == false) {
+		deleteTable(appB.tables[i])
+	}
+}
+showComplete()
+}
+
+function deleteTable(target){
+fetch("https://api.quickbase.com/v1/tables/" + target.id + "?appId=" + appB.appID , 
+{
+    headers: {
+        'Content-Type': 'application/json',
+        'QB-Realm-Hostname': 'demo',
+        'Authorization': 'QB-USER-TOKEN ' + userToken
+    },
+    method: "DELETE"
+})
+.then(function(response) {
+    return response.text()
+})
+.then(function(text) {
+    document.getElementById("log-content").innerHTML += "<p>Deleted " + target.name + " table</p>";
+    log = log + target.name + " table deleted.\n"
+    console.log(target.name + " deleted.")
+})
+.catch(function(error) {
+    console.log('Request failed', error)
+  });
+}
+
+async function showComplete() {
+await timeout(1000)
+alert("Schema Update Complete")
+window.history.back()
+}
+
+function timeout(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+</script>
+</html>
